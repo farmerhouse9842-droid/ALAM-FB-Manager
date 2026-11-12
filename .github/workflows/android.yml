@@ -94,16 +94,29 @@ jobs:
           echo "Project location: $PROJECT_DIR"
           ls -la "$PROJECT_DIR"
 
+      - name: Enable AndroidX
+        shell: bash
+        run: |
+          set -e
+
+          FILE="$PROJECT_DIR/gradle.properties"
+          touch "$FILE"
+
+          sed -i '/^android.useAndroidX=/d' "$FILE"
+          sed -i '/^android.enableJetifier=/d' "$FILE"
+
+          echo "android.useAndroidX=true" >> "$FILE"
+          echo "android.enableJetifier=true" >> "$FILE"
+
+          echo "AndroidX enabled"
+
       - name: Fix Java Kotlin JVM Target
         shell: bash
         run: |
           set -e
-          FILE="$PROJECT_DIR/app/build.gradle.kts"
 
-          if [ ! -f "$FILE" ]; then
-            echo "Gradle Kotlin file not found"
-            exit 1
-          fi
+          FILE="$PROJECT_DIR/app/build.gradle.kts"
+          test -f "$FILE"
 
           cat >> "$FILE" <<'EOF'
 
@@ -137,7 +150,7 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: ALAM-FB-Manager-v2-APK
+          name: ALAM-FB-Manager-Profile-Test-APK
           path: project/**/build/outputs/apk/debug/*.apk
           if-no-files-found: error
           retention-days: 30
