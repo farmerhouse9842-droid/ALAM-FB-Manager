@@ -12,7 +12,6 @@ permissions:
 
 jobs:
   build:
-    name: Build Android APK
     runs-on: ubuntu-latest
 
     steps:
@@ -25,7 +24,6 @@ jobs:
           set -e
           mkdir -p project
           unzip -oq alam_fb_manager_github_upload.zip -d project
-          echo "Project files:"
           find project -maxdepth 3 -type f | head -50
 
       - name: Setup Java 17
@@ -34,53 +32,38 @@ jobs:
           distribution: temurin
           java-version: '17'
 
-      - name: Setup Android SDK
+      - name: Install Android SDK
         shell: bash
         run: |
           set -e
 
-          SDK="${ANDROID_SDK_ROOT:-$ANDROID_HOME}"
-
-          if [ -z "$SDK" ]; then
-            SDK="$HOME/android-sdk"
-          fi
-
-          mkdir -p "$SDK/cmdline-tools"
+          SDK="$HOME/alam-android-sdk"
+          mkdir -p "$SDK/cmdline-tools/latest"
 
           echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
 
-          MANAGER=$(find "$SDK/cmdline-tools" \
-            -type f -name sdkmanager \
-            -print -quit 2>/dev/null || true)
+          curl -fL --retry 3 \
+            https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip \
+            -o /tmp/android-tools.zip
 
-          if [ -z "$MANAGER" ]; then
-            echo "Installing Android Command Line Tools"
+          unzip -oq /tmp/android-tools.zip -d /tmp/alam-tools
 
-            curl -fL --retry 3 \
-              https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip \
-              -o /tmp/cmdline-tools.zip
+          cp -a /tmp/alam-tools/cmdline-tools/. \
+            "$SDK/cmdline-tools/latest/"
 
-            mkdir -p /tmp/android-tools
-            unzip -oq /tmp/cmdline-tools.zip \
-              -d /tmp/android-tools
+          chmod +x "$SDK/cmdline-tools/latest/bin/sdkmanager"
 
-            mkdir -p "$SDK/cmdline-tools/latest"
-
-            cp -a /tmp/android-tools/cmdline-tools/. \
-              "$SDK/cmdline-tools/latest/"
-
-            MANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
-          fi
-
-          chmod +x "$MANAGER"
-          "$MANAGER" --version
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" \
+            --sdk_root="$SDK" --version
 
           set +e
-          yes | "$MANAGER" --sdk_root="$SDK" --licenses
+          yes | "$SDK/cmdline-tools/latest/bin/sdkmanager" \
+            --sdk_root="$SDK" --licenses
           set -e
 
-          "$MANAGER" --sdk_root="$SDK" \
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" \
+            --sdk_root="$SDK" \
             "platform-tools" \
             "platforms;android-35" \
             "build-tools;35.0.0"
@@ -90,28 +73,24 @@ jobs:
         with:
           gradle-version: '8.10.2'
 
-      - name: Find Android Project
+      - name: Locate Android Project
         shell: bash
         run: |
           set -e
 
           SETTINGS=$(find project -type f \
-            \( -name settings.gradle \
-            -o -name settings.gradle.kts \) \
+            \( -name settings.gradle -o -name settings.gradle.kts \) \
             -print -quit)
 
           if [ -z "$SETTINGS" ]; then
-            echo "ERROR: Android project not found"
+            echo "Android Gradle project not found"
             exit 1
           fi
 
           PROJECT_DIR=$(dirname "$SETTINGS")
-
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
 
-          echo "Android project located at:"
-          echo "$PROJECT_DIR"
-
+          echo "Project location: $PROJECT_DIR"
           ls -la "$PROJECT_DIR"
 
       - name: Build Debug APK
